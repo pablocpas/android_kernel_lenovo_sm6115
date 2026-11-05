@@ -13,10 +13,11 @@ ccflags-y += \
 		-DFSC_HAVE_VDM  \
 		-DFSC_HAVE_ACCMODE
 
-EXTRA_CFLAGS += -I$(src)/../core
-EXTRA_CFLAGS += -I$(src)/../core/modules
-EXTRA_CFLAGS += -I$(src)/../core/vdm
-EXTRA_CFLAGS += -I$(src)/../core/vdm/DisplayPort
+ccflags-y += -I$(srctree)/$(src)
+ccflags-y += -I$(srctree)/$(src)/../core
+ccflags-y += -I$(srctree)/$(src)/../core/modules
+ccflags-y += -I$(srctree)/$(src)/../core/vdm
+ccflags-y += -I$(srctree)/$(src)/../core/vdm/DisplayPort
 
 obj-y += fusb302_whole.o
 
