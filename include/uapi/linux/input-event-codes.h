@@ -339,6 +339,9 @@
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
 
 #define KEY_SYM			249
+#define KEY_SWITCHLANUAGE	633
+#define KEY_NC			634
+#define KEY_FULLSCREEN		635
 
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
