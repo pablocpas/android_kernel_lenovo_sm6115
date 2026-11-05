@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -1656,7 +1656,7 @@ static int msm_pcm_routing_channel_mixer_v2(int fe_id, bool perf_mode,
 	int j = 0, be_id = 0;
 	int ret = 0;
 
-	if (fe_id >= MSM_FRONTEND_DAI_MM_SIZE) {
+	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
 		pr_err("%s: invalid FE %d\n", __func__, fe_id);
 		return 0;
 	}
@@ -1723,7 +1723,7 @@ static int msm_pcm_routing_channel_mixer(int fe_id, bool perf_mode,
 		return ret;
 	}
 
-	if (fe_id >= MSM_FRONTEND_DAI_MM_SIZE) {
+	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
 		pr_err("%s: invalid FE %d\n", __func__, fe_id);
 		return 0;
 	}
@@ -13377,11 +13377,6 @@ static const struct snd_kcontrol_new pri_tdm_rx_0_port_mixer_controls[] = {
 		MSM_BACKEND_DAI_SEN_TDM_TX_3, 1, 0,
 		msm_routing_get_port_mixer,
 		msm_routing_put_port_mixer),
-	SOC_DOUBLE_EXT("SLIM_8_TX", SND_SOC_NOPM,
-		MSM_BACKEND_DAI_PRI_TDM_RX_0,
-		MSM_BACKEND_DAI_SLIMBUS_8_TX, 1, 0,
-		msm_routing_get_port_mixer,
-		msm_routing_put_port_mixer),
 };
 
 static const struct snd_kcontrol_new pri_tdm_rx_1_port_mixer_controls[] = {
@@ -17906,6 +17901,10 @@ static const struct snd_kcontrol_new mmul8_mixer_controls[] = {
 #endif
 	SOC_DOUBLE_EXT("SLIM_7_TX", SND_SOC_NOPM,
 	MSM_BACKEND_DAI_SLIMBUS_7_TX,
+	MSM_FRONTEND_DAI_MULTIMEDIA8, 1, 0, msm_routing_get_audio_mixer,
+	msm_routing_put_audio_mixer),
+	SOC_DOUBLE_EXT("SLIM_8_TX", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_SLIMBUS_8_TX,
 	MSM_FRONTEND_DAI_MULTIMEDIA8, 1, 0, msm_routing_get_audio_mixer,
 	msm_routing_put_audio_mixer),
 	SOC_DOUBLE_EXT("USB_AUDIO_TX", SND_SOC_NOPM,
@@ -22822,11 +22821,6 @@ static const struct snd_kcontrol_new cdc_dma_rx_1_switch_mixer_controls =
 	0, 1, 0, msm_routing_get_switch_mixer,
 	msm_routing_put_switch_mixer);
 
-static const struct snd_kcontrol_new cdc_tdm_rx_0_switch_mixer_controls =
-	SOC_SINGLE_EXT("Switch", SND_SOC_NOPM,
-	0, 1, 0, msm_routing_get_switch_mixer,
-	msm_routing_put_switch_mixer);
-
 static const struct snd_kcontrol_new slim6_fm_switch_mixer_controls =
 	SOC_SINGLE_EXT("Switch", SND_SOC_NOPM,
 	0, 1, 0, msm_routing_get_switch_mixer,
@@ -24209,10 +24203,6 @@ static const char * const mi2s_rx_vi_fb_tx_mux_text[] = {
 	"ZERO", "SENARY_TX"
 };
 
-static const char * const quat_mi2s_rx_vi_fb_tx_mux_text[] = {
-	"ZERO", "QUAT_MI2S_TX"
-};
-
 static const char * const int4_mi2s_rx_vi_fb_tx_mono_mux_text[] = {
 	"ZERO", "INT5_MI2S_TX"
 };
@@ -24240,10 +24230,6 @@ static const int wsa_rx_0_vi_fb_tx_rch_value[] = {
 
 static const int mi2s_rx_vi_fb_tx_value[] = {
 	MSM_BACKEND_DAI_MAX, MSM_BACKEND_DAI_SENARY_MI2S_TX
-};
-
-static const int const quat_mi2s_rx_vi_fb_tx_value[] = {
-	MSM_BACKEND_DAI_MAX, MSM_BACKEND_DAI_QUATERNARY_MI2S_TX
 };
 
 static const int int4_mi2s_rx_vi_fb_tx_mono_ch_value[] = {
@@ -24290,11 +24276,6 @@ static const struct soc_enum int4_mi2s_rx_vi_fb_stereo_ch_mux_enum =
 	ARRAY_SIZE(int4_mi2s_rx_vi_fb_tx_stereo_mux_text),
 	int4_mi2s_rx_vi_fb_tx_stereo_mux_text,
 	int4_mi2s_rx_vi_fb_tx_stereo_ch_value);
-
-static const struct soc_enum quat_mi2s_rx_vi_fb_mux_enum =
-	SOC_VALUE_ENUM_DOUBLE(0, MSM_BACKEND_DAI_QUATERNARY_MI2S_RX, 0, 0,
-	ARRAY_SIZE(quat_mi2s_rx_vi_fb_tx_mux_text),
-	quat_mi2s_rx_vi_fb_tx_mux_text, quat_mi2s_rx_vi_fb_tx_value);
 
 static const struct snd_kcontrol_new slim0_rx_vi_fb_lch_mux =
 	SOC_DAPM_ENUM_EXT("SLIM0_RX_VI_FB_LCH_MUX",
@@ -24648,8 +24629,6 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 				&cdc_dma_rx_switch_mixer_controls),
 	SND_SOC_DAPM_SWITCH("RX_CDC_DMA_RX_1_DL_HL", SND_SOC_NOPM, 0, 0,
 				&cdc_dma_rx_1_switch_mixer_controls),
-	SND_SOC_DAPM_SWITCH("PRI_TDM_RX_0_DL_HL", SND_SOC_NOPM, 0, 0,
-				&cdc_tdm_rx_0_switch_mixer_controls),
 #endif
 
 	/* Mixer definitions */
@@ -25336,9 +25315,6 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets_mi2s[] = {
 	/* Virtual Pins to force backends ON atm */
 	SND_SOC_DAPM_MUX("PRI_MI2S_RX_VI_FB_MUX", SND_SOC_NOPM, 0, 0,
 				&mi2s_rx_vi_fb_mux),
-	SND_SOC_DAPM_MUX("QUAT_MI2S_RX_VI_FB_MUX", SND_SOC_NOPM, 0, 0,
-				&quat_mi2s_rx_vi_fb_mux),
-
 	SND_SOC_DAPM_MUX("INT4_MI2S_RX_VI_FB_MONO_CH_MUX", SND_SOC_NOPM, 0, 0,
 				&int4_mi2s_rx_vi_fb_mono_ch_mux),
 	SND_SOC_DAPM_MUX("INT4_MI2S_RX_VI_FB_STEREO_CH_MUX", SND_SOC_NOPM, 0, 0,
@@ -25355,9 +25331,6 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets_tdm[] = {
 	/* Widget name equals to Front-End DAI name<Need confirmation>,
 	 * Stream name must contains substring of front-end dai name
 	 */
-
-	SND_SOC_DAPM_MUX("PRI_TDM_RX_VI_FB_MUX", SND_SOC_NOPM, 0, 0,
-				&aw_tdm_rx_vi_fb_mux),
 
 	SND_SOC_DAPM_AIF_IN("PRI_TDM_RX_0_DL_HL",
 		"Primary TDM0 Hostless Playback",
@@ -26534,6 +26507,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"MultiMedia1 Mixer", "SLIM_9_TX", "SLIMBUS_9_TX"},
 	{"MultiMedia8 Mixer", "SLIM_6_TX", "SLIMBUS_6_TX"},
 	{"MultiMedia8 Mixer", "SLIM_7_TX", "SLIMBUS_7_TX"},
+	{"MultiMedia8 Mixer", "SLIM_8_TX", "SLIMBUS_8_TX"},
 	{"MultiMedia8 Mixer", "SLIM_9_TX", "SLIMBUS_9_TX"},
 	{"MultiMedia4 Mixer", "SLIM_0_TX", "SLIMBUS_0_TX"},
 	{"MultiMedia4 Mixer", "SLIM_1_TX", "SLIMBUS_1_TX"},
@@ -26582,7 +26556,6 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"MultiMedia2 Mixer", "SLIM_0_TX", "SLIMBUS_0_TX"},
 	{"MultiMedia2 Mixer", "SLIM_6_TX", "SLIMBUS_6_TX"},
 	{"MultiMedia2 Mixer", "SLIM_1_TX", "SLIMBUS_1_TX"},
-	{"MultiMedia2 Mixer", "SLIM_7_TX", "SLIMBUS_7_TX"},
 	{"MultiMedia2 Mixer", "SLIM_8_TX", "SLIMBUS_8_TX"},
 	{"MultiMedia6 Mixer", "SLIM_0_TX", "SLIMBUS_0_TX"},
 	{"MultiMedia6 Mixer", "SLIM_1_TX", "SLIMBUS_1_TX"},
@@ -26860,6 +26833,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"MultiMedia19 Mixer", "TX_CDC_DMA_TX_3", "TX_CDC_DMA_TX_3"},
 	{"MultiMedia19 Mixer", "TX_CDC_DMA_TX_4", "TX_CDC_DMA_TX_4"},
 	{"MultiMedia19 Mixer", "TX_CDC_DMA_TX_5", "TX_CDC_DMA_TX_5"},
+
 	{"MultiMedia19 Mixer", "VA_CDC_DMA_TX_0", "VA_CDC_DMA_TX_0"},
 	{"MultiMedia19 Mixer", "VA_CDC_DMA_TX_1", "VA_CDC_DMA_TX_1"},
 #endif
@@ -29015,14 +28989,10 @@ static const struct snd_soc_dapm_route intercon_tdm[] = {
 	{"VOC_EXT_EC MUX", "PRI_TDM_TX",   "PRI_TDM_TX_0"},
 	{"VOC_EXT_EC MUX", "SEC_TDM_TX",   "SEC_TDM_TX_0"},
 
-	{"PRI_TDM_RX_0", NULL, "PRI_TDM_RX_VI_FB_MUX"},           //path
-	{"PRI_TDM_RX_VI_FB_MUX", "PRI_TDM_TX_0", "PRI_TDM_TX_0"}, //path
-
 	{"PRI_TDM_TX_0_UL_HL", NULL, "PRI_TDM_TX_0"},
 	{"PRI_TDM_TX_1_UL_HL", NULL, "PRI_TDM_TX_1"},
 	{"PRI_TDM_TX_2_UL_HL", NULL, "PRI_TDM_TX_2"},
 	{"PRI_TDM_TX_3_UL_HL", NULL, "PRI_TDM_TX_3"},
-	{"PRI_TDM_RX_0_DL_HL","Switch","CDC_DMA_DL_HL"},
 	{"PRI_TDM_RX_0", NULL, "PRI_TDM_RX_0_DL_HL"},
 	{"PRI_TDM_RX_1", NULL, "PRI_TDM_RX_1_DL_HL"},
 	{"PRI_TDM_RX_2", NULL, "PRI_TDM_RX_2_DL_HL"},
@@ -29102,7 +29072,6 @@ static const struct snd_soc_dapm_route intercon_tdm[] = {
 	{"PRI_TDM_RX_0 Port Mixer", "SEN_TDM_TX_1", "SEN_TDM_TX_1"},
 	{"PRI_TDM_RX_0 Port Mixer", "SEN_TDM_TX_2", "SEN_TDM_TX_2"},
 	{"PRI_TDM_RX_0 Port Mixer", "SEN_TDM_TX_3", "SEN_TDM_TX_3"},
-	{"PRI_TDM_RX_0 Port Mixer", "SLIM_8_TX", "SLIMBUS_8_TX"},
 	{"PRI_TDM_RX_0", NULL, "PRI_TDM_RX_0 Port Mixer"},
 
 #ifndef CONFIG_MI2S_DISABLE
