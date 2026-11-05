@@ -2414,13 +2414,15 @@ static int qg_charge_full_update(struct qpnp_qg *chip)
 	}
 	health = prop.intval;
 
+	/* Sin temperatura no se toca el limite en caliente, pero lo demas sigue. */
 	rc = power_supply_get_property(chip->batt_psy,
 			POWER_SUPPLY_PROP_TEMP, &prop);
 	if (rc < 0) {
 		pr_err("Failed to get battery temp, rc=%d\n", rc);
-		goto out;
+		batt_temp = INT_MIN;
+	} else {
+		batt_temp = prop.intval;
 	}
-	batt_temp = prop.intval;
 
 	rc = power_supply_get_property(chip->batt_psy,
 			POWER_SUPPLY_PROP_RECHARGE_SOC, &prop);
@@ -2447,8 +2449,9 @@ static int qg_charge_full_update(struct qpnp_qg *chip)
 					"Terminated charging @ msoc=%d\n",
 					chip->msoc);
 			}
-			qg_warm_fv_vote(chip,
-				batt_temp >= QG_WARM_TEMP_DECIDEGC);
+			if (batt_temp != INT_MIN)
+				qg_warm_fv_vote(chip,
+					batt_temp >= QG_WARM_TEMP_DECIDEGC);
 		}
 	} else if ((!chip->charge_done || chip->msoc <= recharge_soc)
 				&& chip->charge_full) {
