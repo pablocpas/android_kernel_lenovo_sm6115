@@ -92,6 +92,7 @@ extern const uint16_t touch_key_array[TOUCH_KEY_NUM];
 //-OAK1911,shenwenbin.wt,ADD,20211228,add penraw node for customer
 #define NVT_TOUCH_MP 1
 #define MT_PROTOCOL_B 1
+#define WAKEUP_GESTURE 0
 #if WAKEUP_GESTURE
 extern const uint16_t gesture_key_array[];
 #endif

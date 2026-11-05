@@ -151,7 +151,6 @@ ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
                 bengal-rumi-overlay.dtbo \
                 bengal-qrd-overlay.dtbo \
                 bengal-idp-overlay.dtbo \
-                j606f-overlay.dtbo \
                 bengal-idp-nopmi-overlay.dtbo \
                 bengal-idp-usbc-overlay.dtbo \
                 bengalp-idp-overlay.dtbo \
@@ -512,10 +511,14 @@ dtb-$(CONFIG_ARCH_SDM429) += sdm429-mtp.dtb \
 	sda429-cdp.dtb
 endif
 
+# J606F: solo se compila el device tree de la tablet. El resto de placas no encaja
+# con los dtsi de Lenovo.
+ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+dtbo-y := j606f-overlay.dtbo
+j606f-overlay.dtbo-base := bengalp.dtb
+endif
+dtb-y := bengalp.dtb
+
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
 clean-files    := *.dtb *.dtbo
-
-ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
-j606f-overlay.dtbo-base := bengalp.dtb
-endif

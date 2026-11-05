@@ -1,3 +1,6 @@
+# Codigo de terceros: no se cambia su comportamiento.
+ccflags-y += -Wno-misleading-indentation
+
 obj-$(CONFIG_SND_SOC_DBMDX) := dbmdx.o
 obj-$(CONFIG_SND_SOC_DBMDX) += dbmdx-spi.o
 obj-$(CONFIG_SND_SOC_DBMDX) += dbmdx-i2c.o

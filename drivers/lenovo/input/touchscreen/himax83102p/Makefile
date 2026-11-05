@@ -1,3 +1,6 @@
+# Codigo de terceros: no se cambia su comportamiento.
+ccflags-y += -Wno-misleading-indentation
+
 # Makefile for the Himax touchscreen drivers.
 
 ifneq ($(filter y, $(CONFIG_KALLSYMS_ALL)),)

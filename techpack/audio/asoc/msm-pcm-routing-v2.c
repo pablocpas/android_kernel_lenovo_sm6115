@@ -24312,6 +24312,19 @@ static const struct snd_kcontrol_new int4_mi2s_rx_vi_fb_stereo_ch_mux =
 	int4_mi2s_rx_vi_fb_stereo_ch_mux_enum, spkr_prot_get_vi_rch_port,
 	spkr_prot_put_vi_rch_port);
 
+static const char * const quat_mi2s_rx_vi_fb_tx_mux_text[] = {
+	"ZERO", "QUAT_MI2S_TX"
+};
+
+static const int const quat_mi2s_rx_vi_fb_tx_value[] = {
+	MSM_BACKEND_DAI_MAX, MSM_BACKEND_DAI_QUATERNARY_MI2S_TX
+};
+
+static const struct soc_enum quat_mi2s_rx_vi_fb_mux_enum =
+	SOC_VALUE_ENUM_DOUBLE(0, MSM_BACKEND_DAI_QUATERNARY_MI2S_RX, 0, 0,
+	ARRAY_SIZE(quat_mi2s_rx_vi_fb_tx_mux_text),
+	quat_mi2s_rx_vi_fb_tx_mux_text, quat_mi2s_rx_vi_fb_tx_value);
+
 static const struct snd_kcontrol_new quat_mi2s_rx_vi_fb_mux =
 	SOC_DAPM_ENUM_EXT("QUAT_MI2S_RX_VI_FB_MUX",
 	quat_mi2s_rx_vi_fb_mux_enum, spkr_prot_get_vi_lch_port,

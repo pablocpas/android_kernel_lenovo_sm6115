@@ -25,7 +25,6 @@
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
 #include <linux/pm_runtime.h>	//OAK78,shenwenbin.wt,MOD,20211130,double wakeup sometime SPI not wake
-#include <linux/hardware_info.h>	//Bug697290 ,shenwenbin.wt,ADD,20211021,add TP hardware info
 
 #if defined(CONFIG_FB)
 #if defined(CONFIG_DRM_PANEL)
@@ -741,7 +740,6 @@ info_retry:
 	//+Bug697290 ,shenwenbin.wt,ADD,20211021,add TP hardware info
 	snprintf(firmware_ver,HARDWARE_MAX_ITEM_LONGTH,"NT36523-W,VND:TM,FW:0x%02x", ts->fw_ver);
 	NVT_LOG("TP_name = %s\n", firmware_ver);
-	hardwareinfo_set_prop(HARDWARE_TP,firmware_ver);
 	//-Bug697290 ,shenwenbin.wt,ADD,20211021,add TP hardware info
 
 	ret = 0;
