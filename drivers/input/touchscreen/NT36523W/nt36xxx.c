@@ -39,6 +39,8 @@
 #endif
 
 #include "nt36xxx.h"
+
+#define HARDWARE_MAX_ITEM_LONGTH 64
 #if NVT_TOUCH_ESD_PROTECT
 #include <linux/jiffies.h>
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
