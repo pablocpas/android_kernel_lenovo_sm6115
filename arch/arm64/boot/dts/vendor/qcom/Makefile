@@ -151,6 +151,7 @@ ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
                 bengal-rumi-overlay.dtbo \
                 bengal-qrd-overlay.dtbo \
                 bengal-idp-overlay.dtbo \
+                j606f-overlay.dtbo \
                 bengal-idp-nopmi-overlay.dtbo \
                 bengal-idp-usbc-overlay.dtbo \
                 bengalp-idp-overlay.dtbo \
@@ -514,3 +515,7 @@ endif
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
 clean-files    := *.dtb *.dtbo
+
+ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+j606f-overlay.dtbo-base := bengalp.dtb
+endif
