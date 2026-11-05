@@ -230,7 +230,7 @@ static struct afe_clk_set mi2s_clk[MI2S_MAX] = {
 	{
 		AFE_API_VERSION_I2S_CONFIG,
 		Q6AFE_LPASS_CLK_ID_SEC_MI2S_IBIT,
-		Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
+		Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ,
 		Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_NO,
 		Q6AFE_LPASS_CLK_ROOT_DEFAULT,
 		0,
@@ -456,6 +456,9 @@ static char const *bt_sample_rate_tx_text[] = {"KHZ_8", "KHZ_16",
 					"KHZ_44P1", "KHZ_48",
 					"KHZ_88P2", "KHZ_96"};
 static const char *const afe_loopback_tx_ch_text[] = {"One", "Two"};
+#ifdef CONFIG_SND_SOC_ES7210
+static const char *const ES7210_Switch_text[] = {"Off", "On"};
+#endif
 
 static SOC_ENUM_SINGLE_EXT_DECL(usb_rx_sample_rate, usb_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(usb_tx_sample_rate, usb_sample_rate_text);
@@ -547,6 +550,9 @@ static SOC_ENUM_SINGLE_EXT_DECL(bt_sample_rate, bt_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(bt_sample_rate_rx, bt_sample_rate_rx_text);
 static SOC_ENUM_SINGLE_EXT_DECL(bt_sample_rate_tx, bt_sample_rate_tx_text);
 static SOC_ENUM_SINGLE_EXT_DECL(afe_loopback_tx_chs, afe_loopback_tx_ch_text);
+#ifdef CONFIG_SND_SOC_ES7210
+static SOC_ENUM_SINGLE_EXT_DECL(ES7210_Switch_Change, ES7210_Switch_text);
+#endif
 
 static bool is_initial_boot;
 static bool codec_reg_done;
@@ -556,6 +562,9 @@ static struct snd_soc_card snd_soc_card_bengal_msm;
 static int dmic_0_1_gpio_cnt;
 static int dmic_2_3_gpio_cnt;
 static u32 wcd_datalane_mismatch;
+#ifdef CONFIG_SND_SOC_ES7210
+static int ES7210_status;
+#endif
 
 static void *def_wcd_mbhc_cal(void);
 static void *def_rouleur_mbhc_cal(void);
@@ -2879,67 +2888,33 @@ static int msm_bt_sample_rate_tx_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-//added by uner start
-extern unsigned char aw87xxx_show_current_mode(int32_t channel); 
-extern int aw87xxx_audio_scene_load(uint8_t mode, int32_t channel);
-extern unsigned char aw87xxx_show_current_mode1(int32_t channel); 
-extern int aw87xxx_audio_scene_load1(uint8_t mode, int32_t channel);
-
-static const char *const aw87xxx_mode_function_text[] = { "Off", "Music", "Voice", "Fm", "Rcv" };
-enum { AW87XXX_LEFT_CHANNEL = 0, AW87XXX_RIGHT_CHANNEL = 1, };
-
-static SOC_ENUM_SINGLE_EXT_DECL(aw87xxx_mode_function, aw87xxx_mode_function_text);
-
-static int aw87xxx_mode_get_0(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol) 
-{ 
-    unsigned char current_mode; 
-    current_mode = aw87xxx_show_current_mode(AW87XXX_LEFT_CHANNEL); 
-    ucontrol->value.integer.value[0] = current_mode;
-    pr_info("%s: get mode:%d\n", __func__, current_mode);
-    return 0; 
+#ifdef CONFIG_SND_SOC_ES7210
+static int ES7210_Switch_Status_get(struct snd_kcontrol *kcontrol,
+		                               struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s() = %d\n",__func__,ES7210_status);
+	ucontrol->value.integer.value[0] = ES7210_status;
+	return 0;
 }
 
-static int aw87xxx_mode_set_0(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol) 
-{ 
-    int ret = 0;
-    unsigned char set_mode;
+extern void es7210_start(void);
+extern void es7210_stop(void);
 
-    set_mode = ucontrol->value.integer.value[0];
-    ret = aw87xxx_audio_scene_load(set_mode, AW87XXX_LEFT_CHANNEL); 
-    if (ret < 0) 
-    {
-        pr_err("%s: mode:%d set failed\n", __func__, set_mode); 
-        return -EPERM; 
-    } 
-    pr_info("%s: set mode:%d success", __func__, set_mode); 
-    return 0; 
+static int ES7210_Switch_Status_put(struct snd_kcontrol *kcontrol,
+		                               struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s(), ucontrol->value.integer.value[0] = %ld\n", __func__,ucontrol->value.integer.value[0]);
+	ES7210_status = ucontrol->value.integer.value[0];
+	if (ES7210_status) {
+		es7210_start();
+		pr_debug("ES7210_start\n");
+	} else {
+		es7210_stop();
+		pr_debug("ES7210_stop\n");
+	}
+	return 0;
 }
-
-static int aw87xxx_mode_get_1(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
-{ 
-    unsigned char current_mode;
-    current_mode = aw87xxx_show_current_mode1(AW87XXX_RIGHT_CHANNEL);
-    ucontrol->value.integer.value[0] = current_mode; 
-    pr_info("%s: get mode:%d\n", __func__, current_mode);
-    return 0; 
-}
-
-static int aw87xxx_mode_set_1(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol) 
-{ 
-    int ret = 0;
-    unsigned char set_mode;
-
-    set_mode = ucontrol->value.integer.value[0];
-    ret = aw87xxx_audio_scene_load1(set_mode, AW87XXX_RIGHT_CHANNEL); 
-    if (ret < 0) 
-    { 
-        pr_err("%s: mode:%d set failed\n", __func__, set_mode); 
-        return -EPERM; 
-    }
-    pr_info("%s: set mode:%d success", __func__, set_mode);
-    return 0; 
-}
-//added by uner end
+#endif
 
 static const struct snd_kcontrol_new msm_int_snd_controls[] = {
 	SOC_ENUM_EXT("RX_CDC_DMA_RX_0 Channels", rx_cdc_dma_rx_0_chs,
@@ -3030,16 +3005,6 @@ static const struct snd_kcontrol_new msm_int_snd_controls[] = {
 			va_cdc_dma_tx_2_sample_rate,
 			cdc_dma_tx_sample_rate_get,
 			cdc_dma_tx_sample_rate_put),
-	//added by uner start
-	SOC_ENUM_EXT("aw87xxx_mode_switch_0",
-			aw87xxx_mode_function,
-			aw87xxx_mode_get_0,
-			aw87xxx_mode_set_0), 
-	SOC_ENUM_EXT("aw87xxx_mode_switch_1",
-			aw87xxx_mode_function,
-			aw87xxx_mode_get_1,
-			aw87xxx_mode_set_1),
-	//added by uner end
 };
 
 static const struct snd_kcontrol_new msm_common_snd_controls[] = {
@@ -3072,6 +3037,10 @@ static const struct snd_kcontrol_new msm_common_snd_controls[] = {
 			afe_loopback_tx_ch_get, afe_loopback_tx_ch_put),
 	SOC_ENUM_EXT("VI_FEED_TX Channels", vi_feed_tx_chs,
 			msm_vi_feed_tx_ch_get, msm_vi_feed_tx_ch_put),
+#ifdef CONFIG_SND_SOC_ES7210
+	SOC_ENUM_EXT("ES7210_Switch", ES7210_Switch_Change,
+			ES7210_Switch_Status_get, ES7210_Switch_Status_put),
+#endif
 };
 
 static const struct snd_kcontrol_new msm_tdm_snd_controls[] = {
@@ -5130,6 +5099,21 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
 		.ops = &msm_cdc_dma_be_ops,
 	},
+	{/* hw:x,39 */
+		.name = "Primary TDM0 TX_Hostless",
+		.stream_name = "Primary TDM0 Hostless Capture",
+		.cpu_dai_name = "PRI_TDM_TX_0_HOSTLESS",
+		.platform_name = "msm-pcm-hostless",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+		SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+	},
 };
 
 static struct snd_soc_dai_link msm_common_be_dai_links[] = {
@@ -5277,14 +5261,38 @@ static struct snd_soc_dai_link msm_common_be_dai_links[] = {
 	},
 };
 
+struct snd_soc_dai_link_component awinic_codecs[] = {
+	{
+		.of_node = NULL,
+		.dai_name = "aw882xx-aif-0-34",
+		.name = "aw882xx_smartpa.0-0034",
+		//.name = "aw882xx_smartpa_01",
+	},
+	{
+		.of_node = NULL,
+		.dai_name = "aw882xx-aif-0-35",
+		.name = "aw882xx_smartpa.0-0035",
+	},
+	{
+		.of_node = NULL,
+		.dai_name = "aw882xx-aif-0-36",
+		.name = "aw882xx_smartpa.0-0036",
+	},
+	{
+		.of_node = NULL,
+		.dai_name = "aw882xx-aif-0-37",
+		.name = "aw882xx_smartpa.0-0037",
+	},
+};
+
 static struct snd_soc_dai_link msm_tdm_be_dai_links[] = {
 	{
 		.name = LPASS_BE_PRI_TDM_RX_0,
 		.stream_name = "Primary TDM0 Playback",
 		.cpu_dai_name = "msm-dai-q6-tdm.36864",
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
+		.num_codecs = ARRAY_SIZE(awinic_codecs),
+		.codecs = awinic_codecs,
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.id = MSM_BACKEND_DAI_PRI_TDM_RX_0,
@@ -5483,8 +5491,8 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Secondary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.1",
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
+		.codec_name = "soc:dbmdx",
+		.codec_dai_name = "DBMDX_i2s_codec",
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.id = MSM_BACKEND_DAI_SECONDARY_MI2S_RX,
@@ -5498,8 +5506,8 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Secondary MI2S Capture",
 		.cpu_dai_name = "msm-dai-q6-mi2s.1",
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
+		.codec_name = "soc:dbmdx",
+		.codec_dai_name = "DBMDX_i2s_codec",
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.id = MSM_BACKEND_DAI_SECONDARY_MI2S_TX,
