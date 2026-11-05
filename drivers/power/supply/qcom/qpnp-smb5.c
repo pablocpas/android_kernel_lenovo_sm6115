@@ -1957,12 +1957,7 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 		val->intval = chg->fcc_stepper_enable;
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		val->intval = get_effective_result(chg->chg_disable_votable);
-		if (val->intval < 0) {
-			val->intval = 1;
-		} else {
-			val->intval = !val->intval;
-		}
+		val->intval = !smblib_is_charging_paused(chg);
 		break;
 	default:
 		pr_err("batt power supply prop %d not supported\n", psp);
@@ -2034,7 +2029,7 @@ static int smb5_batt_set_prop(struct power_supply *psy,
 		}
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		vote(chg->chg_disable_votable, USER_VOTER, !!!val->intval, 0);
+		rc = smblib_set_charging_paused(chg, !val->intval);
 		break;
 	case POWER_SUPPLY_PROP_SET_SHIP_MODE:
 		/* Not in ship mode as long as the device is active */

@@ -150,8 +150,13 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			flash_cap.max_current_torch[i] =
 				soc_private->torch_max_current[i];
 
-		if (copy_to_user(u64_to_user_ptr(cmd->handle),
-			&flash_cap, sizeof(struct cam_flash_query_cap_info))) {
+		/*
+		 * J606F: el CamX de Lenovo se compilo con la estructura anterior, que
+		 * termina antes de flash_type. Copiar la nueva escribiria 4 bytes
+		 * fuera de su buffer.
+		 */
+		if (copy_to_user(u64_to_user_ptr(cmd->handle), &flash_cap,
+			offsetof(struct cam_flash_query_cap_info, flash_type))) {
 			CAM_ERR(CAM_FLASH, "Failed Copy to User");
 			rc = -EFAULT;
 			goto release_mutex;

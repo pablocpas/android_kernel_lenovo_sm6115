@@ -375,6 +375,7 @@ struct smb_iio {
 };
 
 struct smb_charger {
+	bool			user_charging_paused;
 	struct device		*dev;
 	char			*name;
 	struct regmap		*regmap;
@@ -683,6 +684,8 @@ int smblib_get_prop_batt_present(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_batt_capacity(struct smb_charger *chg,
 				union power_supply_propval *val);
+int smblib_set_charging_paused(struct smb_charger *chg, bool pause);
+bool smblib_is_charging_paused(struct smb_charger *chg);
 int smblib_get_prop_batt_status(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_batt_charge_type(struct smb_charger *chg,

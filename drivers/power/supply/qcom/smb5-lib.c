@@ -1995,6 +1995,30 @@ static bool is_charging_paused(struct smb_charger *chg)
 	return val & CHARGING_PAUSE_CMD_BIT;
 }
 
+/*
+ * J606F (Lenovo): charging_enabled=0 en la bateria pausa la carga con
+ * CHARGING_PAUSE_CMD, como el kernel de stock. La entrada sigue alimentando el
+ * sistema. Sirve para limitar la carga desde el espacio de usuario.
+ */
+int smblib_set_charging_paused(struct smb_charger *chg, bool pause)
+{
+	int rc;
+
+	rc = smblib_masked_write(chg, CHARGING_PAUSE_CMD_REG,
+			CHARGING_PAUSE_CMD_BIT, pause ? CHARGING_PAUSE_CMD_BIT : 0);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't write CHARGING_PAUSE_CMD rc=%d\n", rc);
+		return rc;
+	}
+	chg->user_charging_paused = pause;
+	return 0;
+}
+
+bool smblib_is_charging_paused(struct smb_charger *chg)
+{
+	return is_charging_paused(chg);
+}
+
 #define CUTOFF_COUNT		3
 int smblib_get_prop_batt_status(struct smb_charger *chg,
 				union power_supply_propval *val)
@@ -2137,7 +2161,10 @@ int smblib_get_prop_batt_status(struct smb_charger *chg,
 	}
 
 	if (is_charging_paused(chg)) {
-		val->intval = POWER_SUPPLY_STATUS_CHARGING;
+		/* Una pausa pedida por el usuario no es carga en curso. */
+		val->intval = chg->user_charging_paused ?
+			POWER_SUPPLY_STATUS_NOT_CHARGING :
+			POWER_SUPPLY_STATUS_CHARGING;
 		return 0;
 	}
 

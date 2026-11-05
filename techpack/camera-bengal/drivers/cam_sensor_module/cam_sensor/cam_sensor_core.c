@@ -643,6 +643,30 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 	CAM_DBG(CAM_SENSOR, "read id: 0x%x expected id 0x%x:",
 		chipid, slave_info->sensor_id);
 
+	/*
+	 * J606F: la camara trasera ov13b10 devuelve 0x0d42 en el registro de
+	 * identificacion. Lenovo distingue el modulo de Ofilm (0x07d9) del de
+	 * Qtech (0x06d9) por el ID de modulo de su EEPROM (esclavo 0xB0,
+	 * registro 0x000b), y el device tree declara un sensor por modulo.
+	 */
+	if (chipid == 0x0d42) {
+		uint32_t moduleid = 0;
+		uint16_t sid = s_ctrl->io_master_info.cci_client->sid;
+
+		s_ctrl->io_master_info.cci_client->sid = 0xB0 >> 1;
+		rc = camera_io_dev_read(&(s_ctrl->io_master_info), 0x000b,
+			&moduleid, CAMERA_SENSOR_I2C_TYPE_WORD,
+			CAMERA_SENSOR_I2C_TYPE_WORD);
+		s_ctrl->io_master_info.cci_client->sid = sid;
+		if (rc < 0)
+			return rc;
+		CAM_INFO(CAM_SENSOR, "ov13b10 module id: 0x%x expected 0x%x",
+			moduleid, slave_info->sensor_id);
+		if (moduleid != slave_info->sensor_id)
+			return -ENODEV;
+		return 0;
+	}
+
 	if (cam_sensor_id_by_mask(s_ctrl, chipid) != slave_info->sensor_id) {
 		CAM_WARN(CAM_SENSOR, "read id: 0x%x expected id 0x%x:",
 				chipid, slave_info->sensor_id);

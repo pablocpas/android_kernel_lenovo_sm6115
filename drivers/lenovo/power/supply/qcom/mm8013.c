@@ -9,6 +9,7 @@
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <asm/unaligned.h>
+#include <linux/pmic-voter.h>
 
 #define DRIVER_VERSION                      "1.0.0"
 
@@ -16,6 +17,8 @@
 #define REG_VOLTAGE                         0x08
 #define REG_CURRENT                         0x14
 #define REG_RSOC                            0x2c
+#define REG_CYCLE_COUNT                     0x2a
+#define REG_CHARGE_VOLTAGE                  0x30
 #define REG_BLOCKDATAOFFSET                 0x3e
 #define REG_BLOCKDATA                       0x40
 
@@ -24,7 +27,28 @@ bool has_8013 = false;
 struct mm8013_chip {
     struct i2c_client *client;
     struct power_supply_desc battery;
+    struct power_supply *psy;
+    struct delayed_work maint_work;
+    struct votable *fv_votable;
+    int maint_mv;
 };
+
+/*
+ * Mantenimiento de la bateria por ciclos, como el kernel de stock S320383:
+ * cada 30 s se leen los ciclos del medidor y se ajusta el voltaje de carga,
+ * en el medidor (registro 0x30, mV) y en el limite FV del cargador.
+ *
+ *   ciclos < 150      4430 mV en el medidor, sin limite extra en el cargador
+ *   150 a 399         4380 mV
+ *   400 a 409         4300 mV
+ *   410 o mas         4200 mV
+ *
+ * El voto es de tipo minimo: nunca sube el voltaje por encima del perfil de
+ * la bateria (4,4 V) ni de JEITA.
+ */
+#define MM8013_MAINT_PERIOD_MS              30000
+#define MM8013_MAINT_DEFAULT_MV             4430
+#define BATT_MAINT_VOTER                    "BATT_MAINT_VOTER"
 
 
 struct mm8013_chip *chip;
@@ -137,12 +161,64 @@ static int mm8013_checkdevice(struct mm8013_chip *chip)
         return 0;
 }
 
+static int mm8013_cycle_count(struct mm8013_chip *chip, int *val)
+{
+    int cycles = mm8013_read_reg(chip->client, REG_CYCLE_COUNT);
+
+    if (cycles < 0) return cycles;
+    *val = cycles;
+    return 0;
+}
+
+static int mm8013_maint_target_mv(int cycles)
+{
+    if (cycles >= 410)
+        return 4200;
+    if (cycles >= 400)
+        return 4300;
+    if (cycles >= 150)
+        return 4380;
+    return MM8013_MAINT_DEFAULT_MV;
+}
+
+static void mm8013_maint_work(struct work_struct *work)
+{
+    struct mm8013_chip *chip = container_of(work, struct mm8013_chip,
+                                            maint_work.work);
+    int cycles, mv, cur;
+
+    if (mm8013_cycle_count(chip, &cycles) < 0 || cycles > 0x7fff)
+        goto out;
+
+    mv = mm8013_maint_target_mv(cycles);
+
+    cur = mm8013_read_reg(chip->client, REG_CHARGE_VOLTAGE);
+    if (cur >= 0 && cur != mv)
+        mm8013_write_reg(chip->client, REG_CHARGE_VOLTAGE, mv);
+
+    if (!chip->fv_votable)
+        chip->fv_votable = find_votable("FV");
+    if (chip->fv_votable)
+        vote(chip->fv_votable, BATT_MAINT_VOTER,
+             mv < MM8013_MAINT_DEFAULT_MV, mv * 1000);
+
+    if (chip->fv_votable && mv != chip->maint_mv) {
+        pr_info("mm8013: battery maintenance cycles=%d charge_voltage=%dmV\n",
+                cycles, mv);
+        chip->maint_mv = mv;
+    }
+out:
+    queue_delayed_work(system_power_efficient_wq, &chip->maint_work,
+                       msecs_to_jiffies(MM8013_MAINT_PERIOD_MS));
+}
+
 static enum power_supply_property mm8013_battery_props[] = {
     POWER_SUPPLY_PROP_batt_cap,
     POWER_SUPPLY_PROP_VOLTAGE_NOW,
     POWER_SUPPLY_PROP_CURRENT_NOW,
     POWER_SUPPLY_PROP_TEMP,
     POWER_SUPPLY_PROP_battery_id,
+    POWER_SUPPLY_PROP_CYCLE_COUNT,
 };
 
 
@@ -170,6 +246,9 @@ static int mm8013_get_property(struct power_supply *psy,
      case POWER_SUPPLY_PROP_battery_id:
 	val->intval = battery_id;
 	break;
+    case POWER_SUPPLY_PROP_CYCLE_COUNT:
+	ret = mm8013_cycle_count(chip, &(val->intval));
+	break;
     default:
 	return -EINVAL;
     }
@@ -182,7 +261,7 @@ static const struct power_supply_desc mm8013_desc = {
 	.name			= "mm8013",
 	.type			= POWER_SUPPLY_TYPE_BATTERY,
 	.properties		= mm8013_battery_props,
-	.num_properties		= 5,
+	.num_properties		= ARRAY_SIZE(mm8013_battery_props),
 	.get_property		= mm8013_get_property,
 	.set_property		= NULL,
 	.property_is_writeable	= NULL,
@@ -220,12 +299,34 @@ static int mm8013_probe(struct i2c_client *client,
 		dev_err(&client->dev, "================failed to access platform don't has mm8013!\n");
 		return -EPROBE_DEFER;;
 	}
-        power_supply_register(&client->dev, &mm8013_desc,NULL);
+	chip->psy = power_supply_register(&client->dev, &mm8013_desc, NULL);
+	if (IS_ERR(chip->psy))
+		return PTR_ERR(chip->psy);
+	INIT_DELAYED_WORK(&chip->maint_work, mm8013_maint_work);
+	queue_delayed_work(system_power_efficient_wq, &chip->maint_work, 0);
 	printk("mm8013-init down platform has mm8013!\n");
 
 
 	return 0;
 }
+
+static int mm8013_suspend(struct device *dev)
+{
+	struct mm8013_chip *c = i2c_get_clientdata(to_i2c_client(dev));
+
+	cancel_delayed_work_sync(&c->maint_work);
+	return 0;
+}
+
+static int mm8013_resume(struct device *dev)
+{
+	struct mm8013_chip *c = i2c_get_clientdata(to_i2c_client(dev));
+
+	queue_delayed_work(system_power_efficient_wq, &c->maint_work, 0);
+	return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(mm8013_pm_ops, mm8013_suspend, mm8013_resume);
 
 static const struct i2c_device_id mm8013_id_table[] = {
 	{"mm8013", 0},
@@ -243,6 +344,7 @@ static struct i2c_driver mm8013_i2c_driver = {
 		.name = "mm8013",
 		.owner = THIS_MODULE,
 		.of_match_table = mm8013_match_table,
+		.pm = &mm8013_pm_ops,
 	},
 	.probe = mm8013_probe,
 	.id_table = mm8013_id_table,

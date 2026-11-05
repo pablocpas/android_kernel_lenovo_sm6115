@@ -231,16 +231,13 @@ static int deferred_devs_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(deferred_devs);
 
-#ifdef CONFIG_MODULES
 /*
- * In the case of modules, set the default probe timeout to
- * 30 seconds to give userland some time to load needed modules
+ * J606F: sin limite, como en el kernel de stock. Los pines del codec de audio
+ * dependen del pinctrl LPI, que espera al ADSP; init lo arranca despues de cargar
+ * los modulos y puede tardar mas de 30 s. Con limite, msm-cdc-pinctrl falla con
+ * -ETIMEDOUT y no se registra la tarjeta de sonido.
  */
-static int deferred_probe_timeout = 30;
-#else
-/* In the case of !modules, no probe timeout needed */
 static int deferred_probe_timeout = -1;
-#endif
 static int __init deferred_probe_timeout_setup(char *str)
 {
 	deferred_probe_timeout = simple_strtol(str, NULL, 10);

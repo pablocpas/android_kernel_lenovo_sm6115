@@ -2375,10 +2375,33 @@ static bool qg_cl_ok_to_begin(void *data)
 }
 
 #define DEFAULT_RECHARGE_SOC 95
+/*
+ * J606F (Lenovo): si la carga termina con la bateria a 45,1 C o mas, el voltaje
+ * maximo baja a 4,1 V para no recargar en caliente hasta los 4,2 V de JEITA. El
+ * limite se quita al volver a cargar por debajo de esa temperatura, o con la
+ * bateria por debajo de 4,15 V. Valores del kernel de stock S320383.
+ */
+#define ADJUST_FV_VOTER			"ADJUST_FV_VOTER"
+#define QG_WARM_TEMP_DECIDEGC		451
+#define QG_WARM_FV_UV			4100000
+#define QG_WARM_FV_RELEASE_UV		4150000
+
+static void qg_warm_fv_vote(struct qpnp_qg *chip, bool enable)
+{
+	if (!chip->fv_votable)
+		chip->fv_votable = find_votable("FV");
+	if (!chip->fv_votable)
+		return;
+	if (enable != is_client_vote_enabled(chip->fv_votable, ADJUST_FV_VOTER))
+		pr_info("%s 4.1V warm limit\n", enable ? "Setting" : "Releasing");
+	vote(chip->fv_votable, ADJUST_FV_VOTER, enable,
+			enable ? QG_WARM_FV_UV : 0);
+}
+
 static int qg_charge_full_update(struct qpnp_qg *chip)
 {
 	union power_supply_propval prop = {0, };
-	int rc, recharge_soc, health;
+	int rc, recharge_soc, health, batt_temp;
 
 	if (!chip->dt.hold_soc_while_full)
 		goto out;
@@ -2390,6 +2413,14 @@ static int qg_charge_full_update(struct qpnp_qg *chip)
 		goto out;
 	}
 	health = prop.intval;
+
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_TEMP, &prop);
+	if (rc < 0) {
+		pr_err("Failed to get battery temp, rc=%d\n", rc);
+		goto out;
+	}
+	batt_temp = prop.intval;
 
 	rc = power_supply_get_property(chip->batt_psy,
 			POWER_SUPPLY_PROP_RECHARGE_SOC, &prop);
@@ -2409,10 +2440,15 @@ static int qg_charge_full_update(struct qpnp_qg *chip)
 			chip->charge_full = true;
 			qg_dbg(chip, QG_DEBUG_STATUS, "Setting charge_full (0->1) @ msoc=%d\n",
 					chip->msoc);
-		} else if (health != POWER_SUPPLY_HEALTH_GOOD) {
-			/* terminated in JEITA */
-			qg_dbg(chip, QG_DEBUG_STATUS, "Terminated charging @ msoc=%d\n",
+		} else {
+			if (health != POWER_SUPPLY_HEALTH_GOOD) {
+				/* terminated in JEITA */
+				qg_dbg(chip, QG_DEBUG_STATUS,
+					"Terminated charging @ msoc=%d\n",
 					chip->msoc);
+			}
+			qg_warm_fv_vote(chip,
+				batt_temp >= QG_WARM_TEMP_DECIDEGC);
 		}
 	} else if ((!chip->charge_done || chip->msoc <= recharge_soc)
 				&& chip->charge_full) {
@@ -2687,6 +2723,21 @@ static void qg_status_change_work(struct work_struct *work)
 
 	qg_dbg(chip, QG_DEBUG_STATUS, "charge_status=%d charge_done=%d\n",
 			chip->charge_status, chip->charge_done);
+
+	if (chip->charge_status == POWER_SUPPLY_STATUS_CHARGING) {
+		int temp, uv;
+
+		rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_TEMP, &prop);
+		temp = prop.intval;
+		if (!rc)
+			rc = power_supply_get_property(chip->batt_psy,
+					POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
+		uv = prop.intval;
+		if (!rc && (temp < QG_WARM_TEMP_DECIDEGC ||
+				uv < QG_WARM_FV_RELEASE_UV))
+			qg_warm_fv_vote(chip, false);
+	}
 
 	rc = qg_parallel_status_update(chip);
 	if (rc < 0)

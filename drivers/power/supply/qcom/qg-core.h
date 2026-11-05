@@ -109,6 +109,7 @@ struct qpnp_qg {
 	struct mutex		soc_lock;
 	wait_queue_head_t	qg_wait_q;
 	struct votable		*awake_votable;
+	struct votable		*fv_votable;
 	struct votable		*vbatt_irq_disable_votable;
 	struct votable		*fifo_irq_disable_votable;
 	struct votable		*good_ocv_irq_disable_votable;
