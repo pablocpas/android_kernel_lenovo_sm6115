@@ -4,6 +4,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <soc/qcom/service-locator.h>
 #include <soc/qcom/service-notifier.h>
@@ -17,6 +18,16 @@ static struct pd_qmi_client_data audio_pdr_services[AUDIO_PDR_DOMAIN_MAX] = {
 };
 
 struct srcu_notifier_head audio_pdr_cb_list;
+
+/*
+ * Ultimo estado del localizador de servicios. Si los modulos de audio se cargan
+ * cuando el localizador ya esta activo, su respuesta llega antes de que
+ * q6_notifier se registre y se perdia: la APR nunca recibia "Q6 is Up" y no
+ * habia tarjeta de sonido. Se guarda y se repite a quien se registre despues.
+ */
+static DEFINE_MUTEX(audio_pdr_state_lock);
+static bool audio_pdr_state_known;
+static unsigned long audio_pdr_state = AUDIO_PDR_FRAMEWORK_DOWN;
 
 static int audio_pdr_locator_callback(struct notifier_block *this,
 				      unsigned long opcode, void *data)
@@ -47,7 +58,11 @@ static int audio_pdr_locator_callback(struct notifier_block *this,
 			audio_pdr_services[AUDIO_PDR_DOMAIN_ADSP].
 			total_domains);
 done:
+	mutex_lock(&audio_pdr_state_lock);
+	audio_pdr_state = pdr_state;
+	audio_pdr_state_known = true;
 	srcu_notifier_call_chain(&audio_pdr_cb_list, pdr_state, NULL);
+	mutex_unlock(&audio_pdr_state_lock);
 	return NOTIFY_OK;
 }
 
@@ -66,11 +81,21 @@ static struct notifier_block audio_pdr_locator_nb = {
  */
 int audio_pdr_register(struct notifier_block *nb)
 {
+	int ret;
+
 	if (nb == NULL) {
 		pr_err("%s: Notifier block is NULL\n", __func__);
 		return -EINVAL;
 	}
-	return srcu_notifier_chain_register(&audio_pdr_cb_list, nb);
+	mutex_lock(&audio_pdr_state_lock);
+	ret = srcu_notifier_chain_register(&audio_pdr_cb_list, nb);
+	if (!ret && audio_pdr_state_known) {
+		pr_info("%s: replaying PDR framework state %lu\n",
+			__func__, audio_pdr_state);
+		nb->notifier_call(nb, audio_pdr_state, NULL);
+	}
+	mutex_unlock(&audio_pdr_state_lock);
+	return ret;
 }
 EXPORT_SYMBOL(audio_pdr_register);
 
