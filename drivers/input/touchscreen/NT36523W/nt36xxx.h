@@ -119,8 +119,12 @@ struct nvt_ts_data {
 	struct spi_device *client;
 	struct input_dev *input_dev;
 	struct delayed_work nvt_fwu_work;
-	/* J606F: reanudacion fuera del commit de pantalla, como el driver de stock */
+	/*
+	 * J606F: reposo y reanudacion fuera del commit de pantalla, como el driver de
+	 * stock (nvt_drm_notify_work). panel_on es el ultimo estado avisado.
+	 */
 	struct delayed_work resume_work;
+	bool panel_on;
 	uint16_t addr;
 	int8_t phys[32];
 #if defined(CONFIG_FB)

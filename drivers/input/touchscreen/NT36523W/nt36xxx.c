@@ -2277,6 +2277,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #endif
 
 	bTouchIsAwake = 1;
+	ts->panel_on = true;
 	ts->edge_reject_state = 0;	//OAK700,shenwenbin.wt,add,20211204,add charge mode
     ts->game_mode_state = 0;	//OAK4146,shenwenbin.wt,ADD,20220125,add TP game mode
 	INIT_WORK(&ts_restore_cmd_work, nvt_restore_cmd_func);	//OAK700,shenwenbin.wt,modify,20211227,modify panel direction black display issues
@@ -2733,7 +2734,11 @@ static int32_t nvt_ts_resume(struct device *dev)
 
 static void nvt_ts_resume_work(struct work_struct *work)
 {
-	nvt_ts_resume(&ts->client->dev);
+	/* Un solo trabajo serializa reposo y reanudacion; vale el ultimo aviso */
+	if (READ_ONCE(ts->panel_on))
+		nvt_ts_resume(&ts->client->dev);
+	else
+		nvt_ts_suspend(&ts->client->dev);
 }
 
 #if defined(CONFIG_FB)
@@ -2759,9 +2764,12 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *self, unsigned
 		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
 			if (*blank == DRM_PANEL_BLANK_POWERDOWN) {
 				NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
-				/* una reanudacion pendiente o en curso termina antes de suspender */
-				cancel_delayed_work_sync(&ts->resume_work);
-				nvt_ts_suspend(&ts->client->dev);
+				/*
+				 * Como stock: el reposo va al trabajo y no bloquea el apagado
+				 * del panel. Si hay una reanudacion en curso, va despues.
+				 */
+				WRITE_ONCE(ts->panel_on, false);
+				mod_delayed_work(nvt_fwu_wq, &ts->resume_work, 0);
 			}
 		} else if (event == DRM_PANEL_EVENT_BLANK) {
 			if (*blank == DRM_PANEL_BLANK_UNBLANK) {
@@ -2773,7 +2781,8 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *self, unsigned
 				 * a mitad de imagen: artefactos. Stock lo hace en un trabajo,
 				 * ~300 ms despues de encender el panel.
 				 */
-				queue_delayed_work(nvt_fwu_wq, &ts->resume_work,
+				WRITE_ONCE(ts->panel_on, true);
+				mod_delayed_work(nvt_fwu_wq, &ts->resume_work,
 					msecs_to_jiffies(NVT_RESUME_DELAY_MS));
 			}
 		}

@@ -901,13 +901,17 @@ static int32_t nvt_download_firmware_hw_crc(void)
 
 fail:
 		retry++;
-		if(unlikely(retry > 2)) {
+		/*
+		 * J606F: cada intento reinicia la parte tactil del chip, que tambien
+		 * dibuja la pantalla. Tres seguidos (1,1 s) llegaban a desplazar la
+		 * imagen: un solo reintento, medio segundo despues.
+		 */
+		if(unlikely(retry > 1)) {
 			NVT_ERR("error, retry=%d\n", retry);
 			nvt_read_bld_hw_crc();
 			break;
 		}
-		/* J606F: dar tiempo al chip antes de volver a reiniciarlo */
-		msleep(50);
+		msleep(500);
 	}
 
 	end = ktime_get();
