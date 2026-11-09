@@ -97,6 +97,8 @@ extern const uint16_t touch_key_array[TOUCH_KEY_NUM];
 extern const uint16_t gesture_key_array[];
 #endif
 #define BOOT_UPDATE_FIRMWARE 1
+/* J606F: espera desde que el panel se enciende hasta descargar el firmware del tactil */
+#define NVT_RESUME_DELAY_MS 100
 #define BOOT_UPDATE_FIRMWARE_NAME "novatek_ts_fw.bin"
 #define MP_UPDATE_FIRMWARE_NAME   "novatek_ts_mp.bin"
 #define POINT_DATA_CHECKSUM 1
@@ -117,6 +119,8 @@ struct nvt_ts_data {
 	struct spi_device *client;
 	struct input_dev *input_dev;
 	struct delayed_work nvt_fwu_work;
+	/* J606F: reanudacion fuera del commit de pantalla, como el driver de stock */
+	struct delayed_work resume_work;
 	uint16_t addr;
 	int8_t phys[32];
 #if defined(CONFIG_FB)

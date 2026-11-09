@@ -305,9 +305,15 @@ Description:
 return:
 	n.a.
 *******************************************************/
+/*
+ * J606F: el firmware normal se pide una vez y se guarda, como hace el driver de stock
+ * ("use backup normal fw"): al encender la pantalla no hay que volver a leerlo.
+ */
+static const struct firmware *fw_backup_normal;
+
 static void update_firmware_release(void)
 {
-	if (fw_entry) {
+	if (fw_entry && fw_entry != fw_backup_normal) {
 		release_firmware(fw_entry);
 	}
 
@@ -333,10 +339,14 @@ static int32_t update_firmware_request(char *filename)
 	while (1) {
 		NVT_LOG("filename is %s\n", filename);
 
-		ret = request_firmware(&fw_entry, filename, &ts->client->dev);
-		if (ret) {
-			NVT_ERR("firmware load failed, ret=%d\n", ret);
-			goto request_fail;
+		if (fw_backup_normal && !strcmp(filename, BOOT_UPDATE_FIRMWARE_NAME)) {
+			fw_entry = fw_backup_normal;
+		} else {
+			ret = request_firmware(&fw_entry, filename, &ts->client->dev);
+			if (ret) {
+				NVT_ERR("firmware load failed, ret=%d\n", ret);
+				goto request_fail;
+			}
 		}
 
 		// check FW need to write size
@@ -360,11 +370,17 @@ static int32_t update_firmware_request(char *filename)
 			NVT_ERR("bin header parser failed\n");
 			goto invalid;
 		} else {
+			if (!fw_backup_normal && !strcmp(filename, BOOT_UPDATE_FIRMWARE_NAME))
+				fw_backup_normal = fw_entry;
 			break;
 		}
 
 invalid:
-		update_firmware_release();
+		if (fw_entry == fw_backup_normal)
+			fw_backup_normal = NULL;
+		if (fw_entry)
+			release_firmware(fw_entry);
+		fw_entry = NULL;
 		if (!IS_ERR_OR_NULL(bin_map)) {
 			kfree(bin_map);
 			bin_map = NULL;
@@ -890,6 +906,8 @@ fail:
 			nvt_read_bld_hw_crc();
 			break;
 		}
+		/* J606F: dar tiempo al chip antes de volver a reiniciarlo */
+		msleep(50);
 	}
 
 	end = ktime_get();

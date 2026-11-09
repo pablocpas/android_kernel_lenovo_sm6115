@@ -103,6 +103,7 @@ extern int32_t nvt_edge_grid_zone_set(void);
 #if defined(CONFIG_DRM_PANEL)
 static struct drm_panel *active_panel;
 static int nvt_drm_panel_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
+static void nvt_ts_resume_work(struct work_struct *work);
 #elif defined(_MSM_DRM_NOTIFY_H_)
 static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
 #else
@@ -2160,6 +2161,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_create_nvt_fwu_wq_failed;
 	}
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
+	INIT_DELAYED_WORK(&ts->resume_work, nvt_ts_resume_work);
 	// please make sure boot update start after display reset(RESX) sequence
 	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(14000));
 #endif
@@ -2337,6 +2339,7 @@ err_create_nvt_charger_wq_failed:
 //-OAK700,shenwenbin.wt,add,20211204,add charge mode
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
+		cancel_delayed_work_sync(&ts->resume_work);
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
@@ -2406,6 +2409,8 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 	NVT_LOG("Removing driver...\n");
 //+OAK700,shenwenbin.wt,add,20211204,add charge mode
 #if NVT_CHARGER_NOTIFIER_CALLBACK
+		/* J606F: sin esto, el siguiente evento de bateria usaba ts liberado */
+		power_supply_unreg_notifier(&ts->notifier_charger);
 		if (ts->nvt_charger_wq) {
 			cancel_work_sync(&ts->nvt_charger_work);
 			destroy_workqueue(ts->nvt_charger_wq);
@@ -2459,6 +2464,7 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
+		cancel_delayed_work_sync(&ts->resume_work);
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
@@ -2566,6 +2572,7 @@ static void nvt_ts_shutdown(struct spi_device *client)
 
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
+		cancel_delayed_work_sync(&ts->resume_work);
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
@@ -2724,6 +2731,11 @@ static int32_t nvt_ts_resume(struct device *dev)
 }
 
 
+static void nvt_ts_resume_work(struct work_struct *work)
+{
+	nvt_ts_resume(&ts->client->dev);
+}
+
 #if defined(CONFIG_FB)
 #if defined(CONFIG_DRM_PANEL)
 static int nvt_drm_panel_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
@@ -2747,12 +2759,22 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *self, unsigned
 		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
 			if (*blank == DRM_PANEL_BLANK_POWERDOWN) {
 				NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
+				/* una reanudacion pendiente o en curso termina antes de suspender */
+				cancel_delayed_work_sync(&ts->resume_work);
 				nvt_ts_suspend(&ts->client->dev);
 			}
 		} else if (event == DRM_PANEL_EVENT_BLANK) {
 			if (*blank == DRM_PANEL_BLANK_UNBLANK) {
 				NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
-				nvt_ts_resume(&ts->client->dev);
+				/*
+				 * J606F: el chip TDDI dibuja la pantalla. Descargar el firmware
+				 * del tactil justo al pintar el primer fotograma lo encontraba
+				 * ocupado (spi dma tx info failed) y cada reintento lo reiniciaba
+				 * a mitad de imagen: artefactos. Stock lo hace en un trabajo,
+				 * ~300 ms despues de encender el panel.
+				 */
+				queue_delayed_work(nvt_fwu_wq, &ts->resume_work,
+					msecs_to_jiffies(NVT_RESUME_DELAY_MS));
 			}
 		}
 	}
