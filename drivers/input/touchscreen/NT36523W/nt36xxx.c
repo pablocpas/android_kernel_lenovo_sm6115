@@ -1119,40 +1119,39 @@ static void nvt_set_charger_wqu(struct work_struct *work)
     //-OAK700,shenwenbin.wt,modify,20211227,modify panel direction black display issues
 }
 
+/*
+ * J606F: solo los eventos de la bateria, sin filtrar una referencia en cada evento
+ * (power_supply_get_by_name sin put) y con un mensaje por cambio de modo: el
+ * original escribia dos lineas por cada evento de cualquier fuente (~15 % de dmesg).
+ * La logica del modo cargador es la misma.
+ */
 static int nvt_charger_notifier_callback(struct notifier_block *nb,
-unsigned long val, void *v)
+					 unsigned long val, void *v)
 {
-    int ret = 0;
-    struct power_supply *psy = NULL;
-    union power_supply_propval prop;
+	struct power_supply *psy = v;
+	union power_supply_propval prop;
+	int ret;
 
-    //+OAK700,shenwenbin.wt,modify,20220211,charger mode notify sometime error
-    psy = power_supply_get_by_name("battery");
-    if (!psy) {
-        NVT_ERR("Couldn't get battery psy\n");
-        return -EINVAL;
-    }
+	if (val != PSY_EVENT_PROP_CHANGED || !psy || !psy->desc ||
+	    strcmp(psy->desc->name, "battery"))
+		return NOTIFY_DONE;
 
-    if (!strcmp(psy->desc->name, "battery")) {
-        NVT_LOG("NVT_charger_notifier_callback event psy->desc->name is battery\n");
-        if (psy && val == POWER_SUPPLY_PROP_STATUS) {
-            ret = power_supply_get_property(psy,POWER_SUPPLY_PROP_STATUS, &prop);//POWER_SUPPLY_PROP_ONLINE
-            if (ret < 0) {
-                NVT_ERR("Couldn't get POWER_SUPPLY_PROP_ONLINE rc=%d\n", ret);
-                return ret;
-            } else {
-                NVT_LOG("usb prop.intval = %d ;ts->charger_mode = %d;bTouchIsAwake = %d;ts->update_floating =%d\n",prop.intval,ts->charger_mode,bTouchIsAwake,ts->update_floating );
-                if (ts->charger_mode != prop.intval) {
-                    //NVT_LOG("usb prop.intval =%d\n", prop.intval);
-                    ts->charger_mode = prop.intval;
-                    if ( bTouchIsAwake && (ts->nvt_charger_wq != NULL) && (ts->update_floating == 0))
-                        queue_work(ts->nvt_charger_wq,&ts->nvt_charger_work);
-                }
-            }
-        }
-    }
-    //-OAK700,shenwenbin.wt,modify,20220211,charger mode notify sometime error
-    return 0;
+	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_STATUS, &prop);
+	if (ret < 0) {
+		NVT_ERR("Couldn't get POWER_SUPPLY_PROP_STATUS rc=%d\n", ret);
+		return NOTIFY_DONE;
+	}
+
+	if (ts->charger_mode == prop.intval)
+		return NOTIFY_OK;
+
+	NVT_LOG("charger_mode %d -> %d (awake=%d floating=%d)\n",
+		ts->charger_mode, prop.intval, bTouchIsAwake, ts->update_floating);
+	ts->charger_mode = prop.intval;
+	if (bTouchIsAwake && ts->nvt_charger_wq && ts->update_floating == 0)
+		queue_work(ts->nvt_charger_wq, &ts->nvt_charger_work);
+
+	return NOTIFY_OK;
 }
 #endif
 //-OAK700,shenwenbin.wt,add,20211204,add charge mode
