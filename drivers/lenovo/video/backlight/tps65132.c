@@ -46,6 +46,8 @@
 #define I2C_ID_NAME "tps65132"
 static unsigned int GPIO_LCD_BIAS_ENN;
 static unsigned int GPIO_LCD_BIAS_ENP;
+/* J606F: el panel llama a enable/disable; sin probe, los GPIO valdrian 0 */
+static bool tps65132_ready;
 
 /*****************************************************************************
  * GLobal Variable
@@ -132,27 +134,34 @@ extern int Himax_gesture_status(void);
 #if defined(CONFIG_LCD_BIAS_TPS65132)
 void tps65132_enable(void)
 {
-	LCM_LOGD("tps65132_enable\n");
+	if (!tps65132_ready)
+		return;
+	LCM_LOGI("tps65132_enable\n");
 
+	/* Mismo voltaje que fija el probe (0x11, 5,7 V); espera final como stock */
 	gpio_set_value(GPIO_LCD_BIAS_ENP, 1);
 	tps65132_write_bytes(0x00, 0x11);
 	msleep(5);
 	gpio_set_value(GPIO_LCD_BIAS_ENN, 1);
 	tps65132_write_bytes(0x01, 0x11);
-
+	msleep(5);
 }
 
 void tps65132_disable(void)
 {
 	int ret = 0;
 
-	LCM_LOGD("tps65132_disable\n");
+	if (!tps65132_ready)
+		return;
+	LCM_LOGI("tps65132_disable\n");
 
+	/* Con el doble toque de Himax activo el panel tiene que seguir alimentado */
 	ret = Himax_gesture_status();
 	if (ret != 1) {
-		gpio_set_value(GPIO_LCD_BIAS_ENN, 0);
-		msleep(2);
+		/* J606F: orden del kernel de stock: ENP, 2 ms, ENN */
 		gpio_set_value(GPIO_LCD_BIAS_ENP, 0);
+		msleep(2);
+		gpio_set_value(GPIO_LCD_BIAS_ENN, 0);
 	}
 }
 #endif
@@ -205,6 +214,10 @@ static int tps65132_probe(struct i2c_client *client, const struct i2c_device_id 
 			tps65132_write_bytes(0xFF, 0x80);
 		}
 	}
+
+	tps65132_ready = gpio_is_valid(GPIO_LCD_BIAS_ENP) && gpio_is_valid(GPIO_LCD_BIAS_ENN);
+	LCM_LOGI("tps65132 ready=%d enp=%d enn=%d\n", tps65132_ready,
+		GPIO_LCD_BIAS_ENP, GPIO_LCD_BIAS_ENN);
 
 	return 0;
 }

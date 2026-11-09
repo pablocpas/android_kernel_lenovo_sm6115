@@ -12,6 +12,9 @@
 #include <video/mipi_display.h>
 
 #include "dsi_panel.h"
+#if defined(CONFIG_LCD_BIAS_TPS65132)
+#include <linux/tps65132.h>
+#endif
 #include "dsi_ctrl_hw.h"
 #include "dsi_parser.h"
 #include "sde_dbg.h"
@@ -380,6 +383,15 @@ static int dsi_panel_reset(struct dsi_panel *panel)
 		}
 	}
 
+#if defined(CONFIG_LCD_BIAS_TPS65132)
+	/*
+	 * J606F: el bias del panel (AVDD/AVEE) se enciende antes del reset, como en el
+	 * dsi_panel.c de Lenovo. Sin cortarlo al apagar, el chip TDDI (pantalla y
+	 * tactil) nunca se quedaba sin tension: al volver a encender enseguida
+	 * quedaba a medias (imagen desplazada, firmware del tactil que no carga).
+	 */
+	tps65132_enable();
+#endif
 	for (i = 0; i < r_config->count; i++) {
 		gpio_set_value(r_config->reset_gpio,
 			       r_config->sequence[i].level);
@@ -468,8 +480,15 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 	rc = dsi_panel_reset(panel);
 	if (rc) {
 		DSI_ERR("[%s] failed to reset panel, rc=%d\n", panel->name, rc);
+#if defined(CONFIG_LCD_BIAS_TPS65132)
+		tps65132_disable();
+#endif
 		goto error_disable_gpio;
 	}
+
+	/* J606F: el kernel de stock espera 60 ms tras el reset del NT36523W */
+	if (panel->name && strstr(panel->name, "36523W"))
+		usleep_range(60000, 60100);
 
 	goto exit;
 
@@ -515,6 +534,11 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		DSI_ERR("[%s] failed set pinctrl state, rc=%d\n", panel->name,
 		       rc);
 	}
+
+#if defined(CONFIG_LCD_BIAS_TPS65132)
+	/* J606F: corta el bias del panel, como Lenovo (salvo con el gesto de Himax) */
+	tps65132_disable();
+#endif
 
 	rc = dsi_pwr_enable_regulator(&panel->power_info, false);
 	if (rc)
@@ -4553,6 +4577,8 @@ int dsi_panel_disable(struct dsi_panel *panel)
 					panel->name, rc);
 			rc = 0;
 		}
+		/* J606F: el kernel de stock espera 40 ms tras el off-command */
+		usleep_range(40000, 40100);
 	}
 	panel->panel_initialized = false;
 	panel->power_mode = SDE_MODE_DPMS_OFF;
