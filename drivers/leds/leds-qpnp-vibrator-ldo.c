@@ -364,9 +364,16 @@ static ssize_t qpnp_vib_store_vmax(struct device *dev,
 
 	mutex_lock(&chip->lock);
 	chip->vmax_uV = data;
+	/*
+	 * J606F: Android llama a on() antes de setAmplitude(). Sin esto, el voltaje
+	 * nuevo solo se aplicaba en la vibracion siguiente.
+	 */
+	ret = 0;
+	if (chip->vib_enabled && chip->disable_overdrive)
+		ret = qpnp_vib_ldo_set_voltage(chip, chip->vmax_uV);
 	mutex_unlock(&chip->lock);
 	/* J606F: sysfs espera los bytes consumidos; con 0, write() se reintenta sin fin */
-	return count;
+	return ret < 0 ? ret : count;
 }
 
 static struct device_attribute qpnp_vib_attrs[] = {
