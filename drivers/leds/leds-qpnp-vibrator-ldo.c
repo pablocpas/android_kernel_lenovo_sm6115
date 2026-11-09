@@ -32,7 +32,8 @@
  * Define vibration periods: default(5sec), min(50ms), max(15sec) and
  * overdrive(30ms).
  */
-#define QPNP_VIB_MIN_PLAY_MS		50
+/* J606F: Android pide toques de 10-20 ms; 50 ms los alargaba. Un ERM arranca en 20-40 ms. */
+#define QPNP_VIB_MIN_PLAY_MS		30
 #define QPNP_VIB_PLAY_MS		5000
 #define QPNP_VIB_MAX_PLAY_MS		15000
 #define QPNP_VIB_OVERDRIVE_PLAY_MS	30
@@ -364,7 +365,8 @@ static ssize_t qpnp_vib_store_vmax(struct device *dev,
 	mutex_lock(&chip->lock);
 	chip->vmax_uV = data;
 	mutex_unlock(&chip->lock);
-	return ret;
+	/* J606F: sysfs espera los bytes consumidos; con 0, write() se reintenta sin fin */
+	return count;
 }
 
 static struct device_attribute qpnp_vib_attrs[] = {
