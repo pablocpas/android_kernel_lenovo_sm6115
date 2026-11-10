@@ -2775,15 +2775,12 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *self, unsigned
 			if (*blank == DRM_PANEL_BLANK_UNBLANK) {
 				NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
 				/*
-				 * J606F: el chip TDDI dibuja la pantalla. Descargar el firmware
-				 * del tactil justo al pintar el primer fotograma lo encontraba
-				 * ocupado (spi dma tx info failed) y cada reintento lo reiniciaba
-				 * a mitad de imagen: artefactos. Stock lo hace en un trabajo,
-				 * ~300 ms despues de encender el panel.
+				 * J606F: como stock (queue_work_on, sin espera): la descarga del
+				 * firmware va en el trabajo y no bloquea el commit de pantalla.
+				 * Lo que la hacia fallar era el bias del panel sin cortar.
 				 */
 				WRITE_ONCE(ts->panel_on, true);
-				mod_delayed_work(nvt_fwu_wq, &ts->resume_work,
-					msecs_to_jiffies(NVT_RESUME_DELAY_MS));
+				mod_delayed_work(nvt_fwu_wq, &ts->resume_work, 0);
 			}
 		}
 	}
